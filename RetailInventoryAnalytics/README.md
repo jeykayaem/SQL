@@ -1,99 +1,159 @@
 # Retail Inventory Analytics
 
-A SQL portfolio project focused on inventory performance, demand trends, replenishment risk, purchasing activity, and supplier payables for an industrial distribution business.
+A MySQL portfolio project analysing inventory availability, product demand, lost sales, supplier delivery performance, purchasing cost variance, slow-moving stock, and accounts payable for a fictional industrial distributor.
 
-## Business Objective
+## Business objective
 
-Use item-level and monthly operational data to help the business answer questions such as:
+Use item-level and monthly operational data to help inventory, purchasing, and finance teams identify replenishment risks, understand product and category performance, reduce lost sales, evaluate supplier reliability, control purchasing costs, manage aged stock, and prioritize overdue supplier bills.
 
-- Which items have low stock coverage or are at risk of stockout?
-- Which products and categories generate the most sales and revenue?
-- Where are lost sales occurring because inventory was unavailable?
-- How reliable are supplier lead times?
-- Are purchasing costs above or below standard cost?
-- Which items are slow-moving and may require an inventory reserve?
-- What supplier bills remain unpaid, and which are overdue?
-
-The goal is to turn operational data into practical recommendations for inventory planning, purchasing, and working-capital management.
+All company, supplier, item, and transaction values in this dataset are synthetic. Currency is USD.
 
 ## Dataset
 
-The project dataset is synthetic. Company, item, supplier, and transaction values are fictional and suitable for portfolio practice.
+**Source:** [Inventory Data Studio — Inventory Optimization Pro](https://inventoryoptimization.pro/inventory-data-studio/)
 
-- **Business type:** Industrial distribution
-- **Currency:** USD
-- **Monthly history:** December 2021 to November 2026
-- **Latest reporting month:** November 2026
-- **Source:** [Inventory Data Studio](https://inventoryoptimization.pro/inventory-data-studio/)
+**Coverage:** December 2021 to November 2026  
+**Latest inventory and AP snapshot:** November 2026
 
-### Source files
-
-| File | Rows | Purpose |
+| CSV file | Rows | Grain / contents |
 |---|---:|---|
-| `items_and_stock.csv` | 9,000 | Monthly item-level stock, cost, selling price, lead-time, sales, stockout, and stock-cover information |
-| `sales_by_item_month.csv` | 8,551 | Monthly item sales, units sold, revenue, and cost of goods sold |
-| `purchases_by_item_month.csv` | 6,098 | Monthly receipts, supplier cost, freight and duty, landed value, standard cost, and purchase price variance |
-| `ap_open_bills.csv` | 68 | Supplier bills outstanding at November 2026, including due dates and planned payment dates |
+| `items_and_stock.csv` | 9,000 | One row per item per month; stock, available quantity, stock value, sales, lost sales, weeks of cover, and supplier lead times |
+| `sales_by_item_month.csv` | 8,551 | One row per item per month; units sold, revenue, and cost of goods sold |
+| `purchases_by_item_month.csv` | 6,098 | One row per item per month with receipts; received quantity, landed value, standard landed cost, and purchase price variance |
+| `ap_open_bills.csv` | 68 | Open/unpaid supplier bills at the November 2026 snapshot, including due dates and days overdue |
 
-### Data relationships
+### Tables expected in MySQL
 
-- Use **Item code** with the relevant month/period to connect item-level stock, sales, and purchasing records.
-- The open-bills file is a supplier-payables dataset. It supports accounts-payable and overdue-bill analysis.
-- Check the grain of each table before joining. Aggregate monthly facts to the required level first to avoid multiplying quantities or values.
+Import the four CSVs using these table names and retain the source column names:
 
-## Planned SQL Analysis
+- `items_and_stock`
+- `sales_by_item_month`
+- `purchases_by_item_month`
+- `ap_open_bills`
 
-The SQL work will be organized into clear, reusable scripts covering:
+The SQL scripts use the original column headings, including spaces, quoted with MySQL backticks.
 
-1. Database setup, table creation, and data loading
-2. Data-quality checks, null handling, duplicate checks, and reconciliation
-3. Inventory position and stock valuation
-4. Demand trends, average weekly demand, and weeks of cover
-5. Stockout analysis and estimated lost sales
-6. Replenishment prioritization using stock, demand, and supplier lead time
-7. Purchasing analysis and purchase price variance
-8. Supplier lead-time performance
-9. Slow-moving inventory and reserve analysis
-10. Accounts-payable aging and planned payments
-11. CTEs, subqueries, joins, aggregations, and window-function analysis
+## Business questions and findings
 
-## Key Metrics to Explore
+The solutions are in [`BUSINESS_QUESTIONS_SOLUTIONS.sql`](BUSINESS_QUESTIONS_SOLUTIONS.sql).
 
-- On-hand quantity and available quantity
-- Inventory value and average landed cost
-- Units sold and sales revenue
-- Weeks of cover
-- Lost sales units and stockout rate
-- Actual versus planned supplier lead time
-- Purchase price variance
-- Slow-moving inventory reserve
-- Open accounts-payable balance and overdue bills
+### 1. Low stock coverage and stockout risk
 
-Metric definitions and filters should be documented in the SQL scripts so that results can be reproduced and reconciled.
+For the latest month, November 2026:
 
-## Repository Structure
+- **12 items** had zero available quantity at month end.
+- **35 additional items** had positive available quantity but available stock coverage shorter than their planned supplier lead time.
+- **8 items** had no sales in the latest three-month demand window and are flagged for separate slow-moving review, rather than being treated as ordinary replenishment-risk items.
 
-```text
-RetailInventoryAnalytics/
-├── README.md
-├── data/
-│   └── (source CSV files)
-├── sql/
-│   └── (SQL setup, validation, and analysis scripts)
-└── insights/
-    └── (business findings and recommendations)
-```
+Available weeks of cover is calculated as available quantity divided by average weekly units sold over the latest three months (13 weeks). This is compared with planned supplier lead time expressed in weeks.
 
-## Tools and Skills
+### 2. Product and category sales performance
 
-- MySQL / SQL
-- Relational data analysis
-- Data validation and reconciliation
+Across the full dataset:
+
+- **8,509,520 units** sold.
+- **$268,911,353.49** in revenue.
+
+| Category | Revenue | Revenue share |
+|---|---:|---:|
+| Fluid power | $68,728,044.46 | 25.56% |
+| Bearings | $57,765,967.93 | 21.48% |
+| Fasteners | $53,340,724.47 | 19.84% |
+| Electrical | $51,006,588.29 | 18.97% |
+| Power transmission | $38,070,028.34 | 14.16% |
+
+The highest-revenue item was **IT-10128 — Filter cartridge 10-128**, with **$9,778,863.23** in revenue over the available history.
+
+### 3. Lost sales caused by stockouts
+
+- **199,680 units** of demand were recorded as lost sales due to stockouts across the history.
+- **86 distinct items** had at least one lost-sales record.
+- Bearings recorded the largest category total: **64,956 lost units**, followed by Electrical (**50,676**) and Fasteners (**42,404**).
+- The largest item-level lost-sales total was **IT-10135 — Bolt assortment M-135**, at **21,825 units**.
+
+The queries report lost units by item, category, and month to help target replenishment and investigate recurring stockouts.
+
+### 4. Supplier lead-time reliability
+
+Across **6,098 delivery records** with a non-null actual lead time:
+
+- Average planned lead time: **35.88 days**.
+- Average actual lead time: **36.83 days**.
+- **1,356 deliveries** were late, or **22.24%**.
+- Summit Trading had the highest late-delivery rate among suppliers (**24.05%**); Eastbrook Co had the lowest (**18.47%**).
+
+A delivery is classified as late when actual lead time is greater than planned lead time. Months without a delivery are excluded because actual lead time is blank for those months.
+
+### 5. Purchasing cost versus standard cost
+
+Across the purchasing history:
+
+- Actual landed spend: **$193,311,076.22**.
+- Standard-cost benchmark: **$190,089,871.44**.
+- Net purchase price variance: **+$3,221,204.78**, approximately **1.69% above** the standard-cost benchmark.
+
+Positive purchase price variance means landed purchase cost was above standard; negative variance means it was below standard. The supplier-level query compares net variance, so an individual supplier may still have some purchase records below standard even when its total variance is positive.
+
+Granite Partners had the largest total positive variance (**$1,822,570.88**) across suppliers.
+
+### 6. Slow-moving inventory and potential reserve
+
+Using the latest inventory snapshot and the dataset's reserve rule:
+
+- **8 items** had gone 181–365 days without a sale.
+- No items in the latest snapshot were more than 365 days since their last sale.
+- Stock value exposed to the reserve rule: **$1,331,228.26**.
+- Estimated reserve at 50%: **$665,614.13**.
+
+The source rule applies a 50% reserve to stock value for items 181–365 days since last sale and a 100% reserve for items over 365 days. This is an estimated reserve based on the supplied dataset rule, not an accounting determination.
+
+### 7. Unpaid and overdue supplier bills
+
+At the November 2026 snapshot:
+
+- **68 unpaid bills** totalled **$6,063,582.76**.
+- **5 bills** were overdue, totalling **$468,746.68**.
+- The remaining **63 bills** totalled **$5,594,836.08** and were not overdue in the supplied snapshot.
+
+Summit Trading had the largest overdue supplier balance (**$230,339.34** across two overdue bills). The AP queries use the supplied `Days overdue` field so that the result remains tied to the dataset snapshot rather than changing with the date on which the SQL is run.
+
+## SQL files
+
+| File | Purpose |
+|---|---|
+| `DATABASE.sql` | Creates and selects the project database |
+| `CHECKDB.sql` | Checks that the four imported tables can be queried and reviews row counts |
+| `QUERRIES.sql` | Exploratory queries for inventory, sales, supplier, stockout, and data-quality analysis |
+| `joinquerries.sql` | Join practice for products and sales, including products without sales |
+| `joinquerries1.sql` | Analysis of inventory value for items without sales in the latest sales month |
+| `BUSINESS_QUESTIONS_SOLUTIONS.sql` | Consolidated MySQL solutions to all seven business questions |
+
+## How to run the project
+
+1. Open MySQL Workbench and run `DATABASE.sql`.
+2. Import each CSV using **Table Data Import Wizard**, creating the four table names listed above. Keep the source column names and verify data types, especially the month fields and monetary columns.
+3. Run `CHECKDB.sql` to confirm that the tables loaded.
+4. Run `BUSINESS_QUESTIONS_SOLUTIONS.sql` to answer the seven business questions.
+
+The CSV dataset is available from the source link above. The repository currently contains the SQL scripts and README; add the CSV files in a `data/` folder if you want the complete data package stored alongside the code.
+
+## Important analysis and data-grain notes
+
+- `items_and_stock` is a monthly snapshot table. Use the latest `Period` for current inventory and stock-value questions; summing stock value across all months would double-count historical snapshots.
+- Sales and purchase tables also contain monthly facts. Aggregate them to the required level before joining them to another monthly fact table.
+- The supplied `Weeks of cover` uses on-hand quantity. The replenishment-risk solution additionally calculates available-stock cover using `Qty available`, which accounts for allocated orders.
+- `Stocked out (Y/N)` and `Lost sales units (stockout)` describe stockout demand during a month; they do not alone prove that end-of-month available stock is zero.
+- Actual lead time is blank when no delivery was recorded. Those blank rows are excluded from supplier lead-time averages and late-delivery rates.
+- The AP dataset represents the November 2026 open-bill snapshot. Use its supplied days-overdue values rather than recalculating overdue status against today's date.
+
+## Tools and skills demonstrated
+
+- MySQL 8.0
+- Data profiling and validation
 - Joins, CTEs, subqueries, and aggregations
-- Window functions and date analysis
-- Inventory and operations analytics
-
-## Project Status
-
-The project README and analysis structure are being established. Add the source CSV files under `data/` and the project SQL scripts under `sql/` as they are made available. Findings and recommendations should be added under `insights/`.
-
+- Window functions and ranking
+- Date and period analysis
+- Inventory coverage and replenishment analysis
+- Supplier performance and purchase price variance
+- Slow-moving inventory reserve analysis
+- Accounts-payable aging and prioritization
